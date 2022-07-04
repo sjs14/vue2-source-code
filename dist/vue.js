@@ -39,6 +39,271 @@
     return Constructor;
   }
 
+  function _slicedToArray(arr, i) {
+    return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest();
+  }
+
+  function _arrayWithHoles(arr) {
+    if (Array.isArray(arr)) return arr;
+  }
+
+  function _iterableToArrayLimit(arr, i) {
+    var _i = arr == null ? null : typeof Symbol !== "undefined" && arr[Symbol.iterator] || arr["@@iterator"];
+
+    if (_i == null) return;
+    var _arr = [];
+    var _n = true;
+    var _d = false;
+
+    var _s, _e;
+
+    try {
+      for (_i = _i.call(arr); !(_n = (_s = _i.next()).done); _n = true) {
+        _arr.push(_s.value);
+
+        if (i && _arr.length === i) break;
+      }
+    } catch (err) {
+      _d = true;
+      _e = err;
+    } finally {
+      try {
+        if (!_n && _i["return"] != null) _i["return"]();
+      } finally {
+        if (_d) throw _e;
+      }
+    }
+
+    return _arr;
+  }
+
+  function _unsupportedIterableToArray(o, minLen) {
+    if (!o) return;
+    if (typeof o === "string") return _arrayLikeToArray(o, minLen);
+    var n = Object.prototype.toString.call(o).slice(8, -1);
+    if (n === "Object" && o.constructor) n = o.constructor.name;
+    if (n === "Map" || n === "Set") return Array.from(o);
+    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen);
+  }
+
+  function _arrayLikeToArray(arr, len) {
+    if (len == null || len > arr.length) len = arr.length;
+
+    for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i];
+
+    return arr2;
+  }
+
+  function _nonIterableRest() {
+    throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+  }
+
+  var ncname = "[a-zA-Z_][\\-\\.0-9_a-zA-Z]*";
+  var qnameCapture = "((?:".concat(ncname, "\\:)?").concat(ncname, ")");
+  var startTagOpen = new RegExp("^<".concat(qnameCapture));
+  var endTag = new RegExp("^<\\/".concat(qnameCapture, "[^>]*>"));
+  var attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;
+  var startTagClose = /^\s*(\/?)>/;
+  var ELEMENT_TYPE = 1;
+  var TEXT_TYPE = 3;
+  function parseHTML(html) {
+    var stack = [];
+    var root, currentParent;
+
+    function createAstElement(tag, attrs) {
+      return {
+        tag: tag,
+        type: ELEMENT_TYPE,
+        attrs: attrs,
+        parent: null,
+        children: []
+      };
+    }
+
+    function startHandle(tag, attrs) {
+      var node = createAstElement(tag, attrs);
+
+      if (currentParent) {
+        node.parent = currentParent;
+        currentParent.children.push(node);
+      }
+
+      if (!root) {
+        root = node;
+      }
+
+      stack.push(node);
+      currentParent = node;
+    }
+
+    function charsHandle(text) {
+      currentParent.children.push({
+        type: TEXT_TYPE,
+        text: text,
+        parent: currentParent
+      });
+    }
+
+    function endHandle(tag) {
+      stack.pop();
+      currentParent = stack[stack.length - 1];
+    }
+
+    function advance(n) {
+      html = html.substring(n);
+    }
+
+    function parseStartTag() {
+      var start = html.match(startTagOpen);
+
+      if (start) {
+        var match = {
+          tagName: start[1],
+          attrs: []
+        };
+        startHandle(match.tagName, match.attrs);
+        advance(start[0].length);
+        var end, attr;
+
+        while (!(end = html.match(startTagClose)) && (attr = html.match(attribute))) {
+          match.attrs.push({
+            name: attr[1],
+            value: attr[3] || attr[4] || attr[5]
+          });
+          advance(attr[0].length);
+        }
+
+        if (end) {
+          end[1] === "/" && endHandle(start[1]);
+          advance(end[0].length);
+        }
+
+        return match;
+      }
+
+      return false;
+    }
+
+    while (html) {
+      var textEnd = html.indexOf("<");
+
+      if (textEnd === 0) {
+        // 标签开始或者结束位置
+        var startTagMatch = parseStartTag();
+
+        if (startTagMatch) {
+          continue;
+        }
+
+        var endTagMatch = html.match(endTag);
+
+        if (endTagMatch) {
+          endHandle(endTagMatch[1]);
+          advance(endTagMatch[0].length);
+          continue;
+        }
+      } else {
+        // 文本节点开始
+        var text = void 0;
+
+        if (textEnd > 0) {
+          text = html.substring(0, textEnd);
+        } else {
+          text = html;
+        }
+
+        if (text) {
+          charsHandle(text);
+          advance(text.length);
+        }
+      }
+    }
+
+    return root;
+  }
+
+  var defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g;
+
+  function toS(str) {
+    return JSON.stringify(str);
+  }
+
+  function genElement(ast) {
+    var code = "_c(".concat(toS(ast.tag), ",{").concat(ast.attrs ? genProps(ast.attrs) : "", "}").concat(ast.children && ast.children.length > 0 ? ",".concat(ast.children.map(function (item) {
+      return codeGen(item);
+    }).join(",")) : "", ")");
+    return code;
+  }
+
+  function genProps(obj) {
+    var propsStrArr = [];
+    obj.forEach(function (_ref) {
+      var name = _ref.name,
+          value = _ref.value;
+
+      switch (name) {
+        case "style":
+          var styleStrArr = [];
+          value.split(";").forEach(function (item) {
+            var _item$split = item.split(":"),
+                _item$split2 = _slicedToArray(_item$split, 2),
+                cssname = _item$split2[0],
+                cssvalue = _item$split2[1];
+
+            styleStrArr.push("".concat(toS(cssname.trim()), ":").concat(toS(cssvalue.trim())));
+          });
+          propsStrArr.push("\"style\":{".concat(styleStrArr.join(","), "}"));
+          break;
+
+        default:
+          propsStrArr.push("".concat(toS(name.trim()), ":").concat(toS((value !== null && value !== void 0 ? value : "" === "") ? value : value.trim())));
+          break;
+      }
+    });
+    return propsStrArr.join(",");
+  }
+
+  function codeGen(ast) {
+    var code;
+
+    if (ast.type === ELEMENT_TYPE) {
+      code = genElement(ast);
+    }
+
+    if (ast.type === TEXT_TYPE) {
+      var text = ast.text;
+      var tokens = [];
+      var token;
+      var lastIndex = 0;
+      defaultTagRE.lastIndex = 0;
+
+      while (token = defaultTagRE.exec(text)) {
+        var curIndex = token.index;
+
+        if (curIndex > lastIndex) {
+          tokens.push(toS(text.slice(lastIndex, curIndex)));
+        }
+
+        tokens.push("_s(".concat(token[1].trim(), ")"));
+        lastIndex = curIndex + token[0].length;
+      }
+
+      if (lastIndex < text.length) {
+        tokens.push(toS(text.slice(lastIndex)));
+      }
+
+      code = "_v(".concat(tokens.join("+"), ")");
+    }
+
+    return code;
+  }
+
+  var compileToFunction = function compileToFunction(html) {
+    var ast = parseHTML(html);
+    var code = codeGen(ast);
+    return new Function("with(this){ return ".concat(code, "}"));
+  };
+
   var oldArrayProto = Array.prototype;
   var newArrayProto = Object.create(oldArrayProto);
   var methods = ["push", "pop", "shift", "unshift", "reserve", "sort", "splice"];
@@ -133,13 +398,6 @@
     new Observer(data);
   };
 
-  var initState = function initState(vm) {
-    var data = vm.$options.data;
-    data = typeof data === "function" ? data.call(vm) : data;
-    vm._data = data;
-    observe(data);
-  };
-
   var proxy = function proxy(vm, targetKey) {
     var target = vm[targetKey];
 
@@ -160,14 +418,155 @@
     });
   };
 
+  var initState = function initState(vm) {
+    var data = vm.$options.data;
+    data = typeof data === "function" ? data.call(vm) : data;
+    vm._data = data;
+    observe(data); // 数据代理
+
+    proxy(vm, "_data");
+  };
+
+  function createElementVNode(vm, tag) {
+    var props = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+    var key = props.key;
+
+    if (key) {
+      delete props.key;
+    }
+
+    for (var _len = arguments.length, children = new Array(_len > 3 ? _len - 3 : 0), _key = 3; _key < _len; _key++) {
+      children[_key - 3] = arguments[_key];
+    }
+
+    return vnode(vm, tag, key, props, children);
+  }
+  function createTextVNode(vm, text) {
+    return vnode(vm, undefined, undefined, undefined, undefined, text);
+  }
+
+  function vnode(vm, tag, key, data, children, text) {
+    return {
+      vm: vm,
+      tag: tag,
+      key: key,
+      data: data,
+      children: children,
+      text: text
+    };
+  }
+
+  function initLiftCycle(Vue) {
+    Vue.prototype._c = function (tag, attrs, children) {
+      return createElementVNode.apply(void 0, [this].concat(Array.prototype.slice.call(arguments)));
+    };
+
+    Vue.prototype._v = function () {
+      return createTextVNode.apply(void 0, [this].concat(Array.prototype.slice.call(arguments)));
+    };
+
+    Vue.prototype._s = function (value) {
+      if (_typeof(value) !== "object") return value;
+      return JSON.stringify(value);
+    };
+
+    Vue.prototype._render = function () {
+      var vm = this,
+          render = vm.$options.render;
+      return render.call(vm);
+    };
+
+    Vue.prototype._update = function (vnode) {
+      console.log(vnode);
+      var vm = this;
+      var el = vm.$el;
+      vm.$el = patch(el, vnode);
+    };
+  }
+
+  function createElement(vnode) {
+    if (typeof vnode.tag === "string") {
+      vnode.el = document.createElement(vnode.tag);
+      patchProps(vnode.el, vnode.data);
+      vnode.children.forEach(function (child) {
+        vnode.el.appendChild(createElement(child));
+      });
+    } else {
+      vnode.el = document.createTextNode(vnode.text);
+    }
+
+    return vnode.el;
+  }
+
+  function patchProps(el, props) {
+    Object.keys(props).forEach(function (key) {
+      switch (key) {
+        case "style":
+          Object.keys(props.style).forEach(function (key) {
+            el.style[key] = props.style[key];
+          });
+          break;
+
+        default:
+          el.setAttribute(key, props[key]);
+          break;
+      }
+    });
+  }
+
+  function patch(oldVNode, vnode) {
+    var isRealNode = oldVNode.nodeType;
+
+    if (isRealNode) {
+      var elm = oldVNode,
+          parentElm = elm.parentNode;
+      var newElm = createElement(vnode);
+      parentElm.insertBefore(newElm, elm.nextSibling);
+      parentElm.removeChild(elm);
+      return newElm;
+    }
+  }
+
+  var mountComponent = function mountComponent(vm, el) {
+    vm.$el = el;
+
+    var vnode = vm._render();
+
+    vm._update(vnode);
+  };
+
   var initMixin = function initMixin(Vue) {
     Vue.prototype._init = function (options) {
       var vm = this;
-      vm.$options = options; // 数据劫持
+      vm.$options = options; // 初始化数据
 
-      initState(vm); // 数据代理
+      initState(vm); // 挂载
 
-      proxy(vm, "_data");
+      if (options.el) {
+        vm.$mount(options.el);
+      }
+    };
+
+    Vue.prototype.$mount = function (el) {
+      el = document.querySelector(el);
+      var vm = this;
+      var ops = vm.$options;
+
+      if (!ops.render) {
+        var template;
+
+        if (ops.template && el) {
+          template = ops.template;
+        } else if (el) {
+          template = el.outerHTML;
+        }
+
+        if (template) {
+          ops.render = compileToFunction(template);
+        }
+      }
+
+      mountComponent(vm, el);
     };
   };
 
@@ -176,6 +575,7 @@
   }
 
   initMixin(Vue);
+  initLiftCycle(Vue);
 
   return Vue;
 

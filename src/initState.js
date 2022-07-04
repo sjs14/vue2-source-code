@@ -1,4 +1,5 @@
 import { observe } from "./observe/index.js";
+import { proxy } from "./proxy";
 
 export const initState = function (vm) {
   let data = vm.$options.data;
@@ -6,4 +7,7 @@ export const initState = function (vm) {
   vm._data = data;
 
   observe(data)
+
+  // 数据代理
+  proxy(vm, "_data");
 };

@@ -6,23 +6,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
   </head>
-  <body></body>
+  <body>
+    <div
+      id="app"
+      style="color: pink; background-color: green; padding: 20px"
+      id="hehe"
+      key="132"
+    >
+      <p>name: {{name}}, age: {{age}}</p>
+      <p>hello</p>
+      <span>world</span>
+    </div>
+  </body>
   <script src="./vue.js"></script>
   <script>
     const vm = new Vue({
       data() {
         return {
-          a: 1,
-          b: 2,
-          obj:{a:3},
-          children: ["shen", "junsheng"],
+          name: "sjs",
+          age: 31,
         };
       },
+      el: "#app",
     });
-    vm.name = { a: 1 };
-    console.log(vm);
 
-    vm.children.push([{a:1},{a:2}])
-    vm.children.splice(vm.children.length,0,[{a:1},{a:2}])
+    setTimeout(()=>{
+      vm.name='skp'
+      vm.age = 1
+
+      vm._update(vm._render())
+    },2000)
   </script>
 </html>
