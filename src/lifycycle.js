@@ -1,3 +1,4 @@
+import Watcher from "./observe/watcher";
 import { createElementVNode, createTextVNode } from "./vdom/index";
 
 export function initLiftCycle(Vue) {
@@ -17,12 +18,10 @@ export function initLiftCycle(Vue) {
   Vue.prototype._render = function () {
     const vm = this,
       render = vm.$options.render;
-
     return render.call(vm);
   };
 
   Vue.prototype._update = function (vnode) {
-    console.log(vnode);
     const vm = this;
     const el = vm.$el;
     vm.$el = patch(el, vnode);
@@ -77,6 +76,14 @@ function patch(oldVNode, vnode) {
 
 export const mountComponent = function (vm, el) {
   vm.$el = el;
-  const vnode = vm._render();
-  vm._update(vnode);
+
+  const updateComponent = function () {
+    vm._update(vm._render());
+  };
+
+  const watcher = new Watcher(vm, updateComponent, {
+    renderWatch: true,
+  });
+
+  console.log(watcher);
 };

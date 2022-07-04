@@ -83,5 +83,6 @@ export const compileToFunction = function (html) {
   const ast = parseHTML(html);
 
  const code =  codeGen(ast);
+
  return new Function(`with(this){ return ${code}}`)
 };

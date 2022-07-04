@@ -1,19 +1,11 @@
-export const proxy = function (vm, targetKey) {
-  const target = vm[targetKey];
+export const proxy = function (vm, targetKey,key) {
 
-  if (typeof target !== "object" || target === null) {
-    return;
-  }
-
-  Object.keys(target).forEach((key) => {
     Object.defineProperty(vm, key, {
       get() {
-        return target[key];
+        return vm[targetKey][key];
       },
       set(newVal) {
-        if (target[key] === newVal) return;
-        target[key] = newVal;
+        vm[targetKey][key] = newVal
       },
     });
-  });
 };

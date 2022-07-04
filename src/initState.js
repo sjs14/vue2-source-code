@@ -6,8 +6,10 @@ export const initState = function (vm) {
   data = typeof data === "function" ? data.call(vm) : data;
   vm._data = data;
 
-  observe(data)
+  observe(data);
 
-  // 数据代理
-  proxy(vm, "_data");
+  Object.keys(vm._data).forEach((key) => {
+    // 数据代理
+    proxy(vm, "_data", key);
+  });
 };

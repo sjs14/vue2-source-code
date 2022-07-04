@@ -336,11 +336,45 @@
     };
   });
 
+  var id$1 = 0;
+
+  var Dep = /*#__PURE__*/function () {
+    function Dep() {
+      _classCallCheck(this, Dep);
+
+      this.id = id$1++;
+      this.subs = []; // 收集watcher
+    }
+
+    _createClass(Dep, [{
+      key: "depend",
+      value: function depend() {
+        Dep.target.addDep(this);
+      }
+    }, {
+      key: "addSub",
+      value: function addSub(watcher) {
+        this.subs.push(watcher);
+      }
+    }, {
+      key: "notify",
+      value: function notify() {
+        this.subs.forEach(function (watcher) {
+          watcher.update();
+        });
+      }
+    }]);
+
+    return Dep;
+  }();
+
+  Dep.target = null;
+
   var Observer = /*#__PURE__*/function () {
     function Observer(data) {
       _classCallCheck(this, Observer);
 
-      Object.defineProperty(data, '__ob__', {
+      Object.defineProperty(data, "__ob__", {
         value: this,
         enumerable: false
       });
@@ -375,14 +409,20 @@
   var defineReactive = function defineReactive(target, key, value) {
     // 递归
     observe(value);
+    var dep = new Dep();
     Object.defineProperty(target, key, {
       get: function get() {
+        if (Dep.target) {
+          dep.depend();
+        }
+
         return value;
       },
       set: function set(newVal) {
         if (newVal === value) return;
         observe(newVal);
         value = newVal;
+        dep.notify();
       }
     });
   };
@@ -398,23 +438,14 @@
     new Observer(data);
   };
 
-  var proxy = function proxy(vm, targetKey) {
-    var target = vm[targetKey];
-
-    if (_typeof(target) !== "object" || target === null) {
-      return;
-    }
-
-    Object.keys(target).forEach(function (key) {
-      Object.defineProperty(vm, key, {
-        get: function get() {
-          return target[key];
-        },
-        set: function set(newVal) {
-          if (target[key] === newVal) return;
-          target[key] = newVal;
-        }
-      });
+  var proxy = function proxy(vm, targetKey, key) {
+    Object.defineProperty(vm, key, {
+      get: function get() {
+        return vm[targetKey][key];
+      },
+      set: function set(newVal) {
+        vm[targetKey][key] = newVal;
+      }
     });
   };
 
@@ -422,10 +453,54 @@
     var data = vm.$options.data;
     data = typeof data === "function" ? data.call(vm) : data;
     vm._data = data;
-    observe(data); // 数据代理
-
-    proxy(vm, "_data");
+    observe(data);
+    Object.keys(vm._data).forEach(function (key) {
+      // 数据代理
+      proxy(vm, "_data", key);
+    });
   };
+
+  var id = 0;
+
+  var Watcher = /*#__PURE__*/function () {
+    function Watcher(vm, fn, options) {
+      _classCallCheck(this, Watcher);
+
+      this.id = id++;
+      this.getter = fn;
+      this.renderWatch = !!options.renderWatch;
+      this.deps = [];
+      this.depIds = new Set();
+      this.get();
+    }
+
+    _createClass(Watcher, [{
+      key: "get",
+      value: function get() {
+        Dep.target = this;
+        this.getter();
+        Dep.target = null;
+      }
+    }, {
+      key: "addDep",
+      value: function addDep(dep) {
+        var depId = dep.id;
+
+        if (!this.depIds.has(depId)) {
+          this.deps.push(dep);
+          this.depIds.add(depId);
+          dep.addSub(this);
+        }
+      }
+    }, {
+      key: "update",
+      value: function update() {
+        this.get();
+      }
+    }]);
+
+    return Watcher;
+  }();
 
   function createElementVNode(vm, tag) {
     var props = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
@@ -477,7 +552,6 @@
     };
 
     Vue.prototype._update = function (vnode) {
-      console.log(vnode);
       var vm = this;
       var el = vm.$el;
       vm.$el = patch(el, vnode);
@@ -530,9 +604,14 @@
   var mountComponent = function mountComponent(vm, el) {
     vm.$el = el;
 
-    var vnode = vm._render();
+    var updateComponent = function updateComponent() {
+      vm._update(vm._render());
+    };
 
-    vm._update(vnode);
+    var watcher = new Watcher(vm, updateComponent, {
+      renderWatch: true
+    });
+    console.log(watcher);
   };
 
   var initMixin = function initMixin(Vue) {

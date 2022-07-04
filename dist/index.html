@@ -13,7 +13,7 @@
       id="hehe"
       key="132"
     >
-      <p>name: {{name}}, age: {{age}}</p>
+      <p>name: {{name}}，age: {{age}}</p>
       <p>hello</p>
       <span>world</span>
     </div>
@@ -30,11 +30,12 @@
       el: "#app",
     });
 
-    setTimeout(()=>{
-      vm.name='skp'
-      vm.age = 1
+    setTimeout(() => {
+      vm.name = "skp";
+    }, 2000);
 
-      vm._update(vm._render())
-    },2000)
+    setTimeout(() => {
+      vm.age = 1;
+    }, 4000);
   </script>
 </html>
