@@ -1,42 +1,44 @@
 import { compileToFunction } from "./compiler/index";
 import { initState } from "./initState";
-import { mountComponent } from "./lifycycle";
-
+import { callHook, mountComponent } from "./lifycycle";
+import { nextTick } from "./observe/watcher";
+import { mergeOptions } from "./util";
 
 export const initMixin = function (Vue) {
   Vue.prototype._init = function (options) {
     const vm = this;
-    vm.$options = options;
-
+    vm.$options = mergeOptions(vm.constructor.options, options);
+    callHook(vm, "beforeCreate");
     // 初始化数据
     initState(vm);
+    callHook(vm, "created");
 
-    
     // 挂载
-    if(options.el){
-      vm.$mount(options.el)
+    if (options.el) {
+      callHook(vm, "beforeMount");
+      vm.$mount(options.el);
+      callHook(vm, "mounted");
     }
   };
 
-
   Vue.prototype.$mount = function (el) {
-    el = document.querySelector(el)
-    const vm = this
-    let ops = vm.$options
-    if(!ops.render){
-      let template
-       if(ops.template&&el){
-        template = ops.template
-      }else if(el){
-          template = el.outerHTML
+    el = document.querySelector(el);
+    const vm = this;
+    let ops = vm.$options;
+    if (!ops.render) {
+      let template;
+      if (ops.template && el) {
+        template = ops.template;
+      } else if (el) {
+        template = el.outerHTML;
       }
 
-      if(template){
-       ops.render =  compileToFunction(template)
+      if (template) {
+        ops.render = compileToFunction(template);
       }
     }
-    
 
-    mountComponent(vm,el)
-  }
+    mountComponent(vm, el);
+  };
+  Vue.prototype.$nextTick = nextTick;
 };

@@ -13,13 +13,25 @@
       id="hehe"
       key="132"
     >
-      <p>name: {{name}}，age: {{age}}</p>
+      <p id="text">name: {{name}}，age: {{age}}</p>
       <p>hello</p>
       <span>world</span>
     </div>
   </body>
   <script src="./vue.js"></script>
+  <!-- <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.7.0/vue.min.js"></script> -->
   <script>
+    Vue.mixin({
+      created() {
+        console.log("mixin1-created");
+      },
+    });
+
+    Vue.mixin({
+      created() {
+        console.log("mixin2-created");
+      },
+    });
     const vm = new Vue({
       data() {
         return {
@@ -27,15 +39,22 @@
           age: 31,
         };
       },
+      created() {
+        console.log("created");
+      },
       el: "#app",
     });
 
     setTimeout(() => {
       vm.name = "skp";
-    }, 2000);
 
-    setTimeout(() => {
       vm.age = 1;
-    }, 4000);
+
+      vm.$nextTick(function test() {
+        console.log(document.querySelector("#text").innerText);
+      });
+    }, 1000);
+
+    console.log(Vue.options);
   </script>
 </html>

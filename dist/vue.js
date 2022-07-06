@@ -495,12 +495,91 @@
     }, {
       key: "update",
       value: function update() {
+        queueWatcher(this);
+      }
+    }, {
+      key: "run",
+      value: function run() {
+        console.log("run");
         this.get();
       }
     }]);
 
     return Watcher;
   }();
+  var watcherQueue = [],
+      watcherMap = {},
+      pending = false;
+
+  function queueWatcher(watcher) {
+    var id = watcher.id;
+
+    if (!watcherMap[id]) {
+      watcherQueue.push(watcher);
+      watcherMap[id] = true;
+
+      if (!pending) {
+        nextTick(flushSchedulerQueue);
+        pending = true;
+      }
+    }
+  }
+
+  function flushSchedulerQueue() {
+    var watchers = watcherQueue.slice(0);
+    watcherQueue = [];
+    watcherMap = {};
+    pending = false;
+    watchers.forEach(function (watcher) {
+      return watcher.run();
+    });
+  }
+
+  var timerFn;
+
+  if (Promise) {
+    timerFn = function timerFn() {
+      Promise.resolve().then(flushCbQueue);
+    };
+  } else if (MutationObserver) {
+    var observer = new MutationObserver(flushCbQueue);
+    var textNode = document.createTextNode(1);
+    observer.observe(textNode, {
+      characterData: true
+    });
+
+    timerFn = function timerFn() {
+      textNode.textContent = 2;
+    };
+  } else if (setImmediate) {
+    timerFn = function timerFn() {
+      setImmediate(flushCbQueue);
+    };
+  } else {
+    timerFn = function timerFn() {
+      setTimeout(flushCbQueue);
+    };
+  }
+
+  var cbQueue = [],
+      waiting = false;
+  function nextTick(cb) {
+    cbQueue.push(cb);
+
+    if (!waiting) {
+      timerFn();
+      waiting = true;
+    }
+  }
+
+  function flushCbQueue() {
+    var cbs = cbQueue.slice(0);
+    cbQueue = [];
+    waiting = false;
+    cbs.forEach(function (cb) {
+      return cb();
+    });
+  }
 
   function createElementVNode(vm, tag) {
     var props = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
@@ -613,16 +692,64 @@
     });
     console.log(watcher);
   };
+  function callHook(vm, hook) {
+    var handles = vm.$options[hook];
+    if (!handles) return;
+    handles.forEach(function (handle) {
+      return handle();
+    });
+  }
+
+  var tactics = {};
+  var lifycycles = ["beforeCreate", "created", "beforeMount", "mounted", "beforeUpdate", "updated", "beforeDestroy", "destroyed"];
+  lifycycles.forEach(function (lifycycle) {
+    tactics[lifycycle] = function (p, c) {
+      if (c) {
+        if (p) {
+          return p.concat(c);
+        } else {
+          return [c];
+        }
+      } else {
+        return p;
+      }
+    };
+  });
+  function mergeOptions(parent, child) {
+    var options = {};
+    Object.keys(parent).forEach(function (key) {
+      mergeField(key);
+    });
+    Object.keys(child).forEach(function (key) {
+      if (!parent.hasOwnProperty(key)) {
+        mergeField(key);
+      }
+    });
+
+    function mergeField(key) {
+      if (tactics[key]) {
+        options[key] = tactics[key](parent[key], child[key]);
+      } else {
+        options[key] = child[key] || parent[key];
+      }
+    }
+
+    return options;
+  }
 
   var initMixin = function initMixin(Vue) {
     Vue.prototype._init = function (options) {
       var vm = this;
-      vm.$options = options; // 初始化数据
+      vm.$options = mergeOptions(vm.constructor.options, options);
+      callHook(vm, "beforeCreate"); // 初始化数据
 
-      initState(vm); // 挂载
+      initState(vm);
+      callHook(vm, "created"); // 挂载
 
       if (options.el) {
+        callHook(vm, "beforeMount");
         vm.$mount(options.el);
+        callHook(vm, "mounted");
       }
     };
 
@@ -647,6 +774,8 @@
 
       mountComponent(vm, el);
     };
+
+    Vue.prototype.$nextTick = nextTick;
   };
 
   function Vue(options) {
@@ -655,6 +784,12 @@
 
   initMixin(Vue);
   initLiftCycle(Vue);
+  Vue.options = {};
+
+  Vue.mixin = function (mixin) {
+    this.options = mergeOptions(Vue.options, mixin);
+    return this;
+  };
 
   return Vue;
 

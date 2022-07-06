@@ -87,3 +87,10 @@ export const mountComponent = function (vm, el) {
 
   console.log(watcher);
 };
+
+export function callHook(vm, hook) {
+  const handles = vm.$options[hook];
+  if (!handles) return;
+
+  handles.forEach((handle) => handle());
+}
