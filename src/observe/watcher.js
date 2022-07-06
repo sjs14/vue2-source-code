@@ -37,7 +37,6 @@ export default class Watcher {
   }
 
   run() {
-    console.log("run");
     this.get();
   }
 }

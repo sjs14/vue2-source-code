@@ -85,7 +85,6 @@ export const mountComponent = function (vm, el) {
     renderWatch: true,
   });
 
-  console.log(watcher);
 };
 
 export function callHook(vm, hook) {

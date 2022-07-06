@@ -4,6 +4,52 @@
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 })(this, (function () { 'use strict';
 
+  var tactics = {};
+  var lifycycles = ["beforeCreate", "created", "beforeMount", "mounted", "beforeUpdate", "updated", "beforeDestroy", "destroyed"];
+  lifycycles.forEach(function (lifycycle) {
+    tactics[lifycycle] = function (p, c) {
+      if (c) {
+        if (p) {
+          return p.concat(c);
+        } else {
+          return [c];
+        }
+      } else {
+        return p;
+      }
+    };
+  });
+  function mergeOptions(parent, child) {
+    var options = {};
+    Object.keys(parent).forEach(function (key) {
+      mergeField(key);
+    });
+    Object.keys(child).forEach(function (key) {
+      if (!parent.hasOwnProperty(key)) {
+        mergeField(key);
+      }
+    });
+
+    function mergeField(key) {
+      if (tactics[key]) {
+        options[key] = tactics[key](parent[key], child[key]);
+      } else {
+        options[key] = child[key] || parent[key];
+      }
+    }
+
+    return options;
+  }
+
+  function initGlobalApi(Vue) {
+    Vue.options = {};
+
+    Vue.mixin = function (mixin) {
+      this.options = mergeOptions(Vue.options, mixin);
+      return this;
+    };
+  }
+
   function _typeof(obj) {
     "@babel/helpers - typeof";
 
@@ -500,7 +546,6 @@
     }, {
       key: "run",
       value: function run() {
-        console.log("run");
         this.get();
       }
     }]);
@@ -687,10 +732,9 @@
       vm._update(vm._render());
     };
 
-    var watcher = new Watcher(vm, updateComponent, {
+    new Watcher(vm, updateComponent, {
       renderWatch: true
     });
-    console.log(watcher);
   };
   function callHook(vm, hook) {
     var handles = vm.$options[hook];
@@ -698,43 +742,6 @@
     handles.forEach(function (handle) {
       return handle();
     });
-  }
-
-  var tactics = {};
-  var lifycycles = ["beforeCreate", "created", "beforeMount", "mounted", "beforeUpdate", "updated", "beforeDestroy", "destroyed"];
-  lifycycles.forEach(function (lifycycle) {
-    tactics[lifycycle] = function (p, c) {
-      if (c) {
-        if (p) {
-          return p.concat(c);
-        } else {
-          return [c];
-        }
-      } else {
-        return p;
-      }
-    };
-  });
-  function mergeOptions(parent, child) {
-    var options = {};
-    Object.keys(parent).forEach(function (key) {
-      mergeField(key);
-    });
-    Object.keys(child).forEach(function (key) {
-      if (!parent.hasOwnProperty(key)) {
-        mergeField(key);
-      }
-    });
-
-    function mergeField(key) {
-      if (tactics[key]) {
-        options[key] = tactics[key](parent[key], child[key]);
-      } else {
-        options[key] = child[key] || parent[key];
-      }
-    }
-
-    return options;
   }
 
   var initMixin = function initMixin(Vue) {
@@ -784,12 +791,7 @@
 
   initMixin(Vue);
   initLiftCycle(Vue);
-  Vue.options = {};
-
-  Vue.mixin = function (mixin) {
-    this.options = mergeOptions(Vue.options, mixin);
-    return this;
-  };
+  initGlobalApi(Vue);
 
   return Vue;
 
