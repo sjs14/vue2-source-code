@@ -1,4 +1,5 @@
 import { compileToFunction } from "./compiler/index";
+import { initComputed } from "./initComputed";
 import { initState } from "./initState";
 import { callHook, mountComponent } from "./lifycycle";
 import { nextTick } from "./observe/watcher";
@@ -11,6 +12,7 @@ export const initMixin = function (Vue) {
     callHook(vm, "beforeCreate");
     // 初始化数据
     initState(vm);
+    initComputed(vm)
     callHook(vm, "created");
 
     // 挂载

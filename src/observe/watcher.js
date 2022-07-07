@@ -1,11 +1,11 @@
-import Dep from "./dep";
+import Dep, { popTarget, pushTarget } from "./dep";
 
 let id = 0;
 
 export default class Watcher {
   constructor(vm, fn, options) {
     this.id = id++;
-
+    this.vm = vm;
     this.getter = fn;
 
     this.renderWatch = !!options.renderWatch;
@@ -13,14 +13,21 @@ export default class Watcher {
     this.deps = [];
 
     this.depIds = new Set();
-
-    this.get();
+    this.lazy = !!options.lazy;
+    this.dirty = !!options.lazy;
+    this.lazy ? undefined : this.get();
   }
-
+  evaluate() {
+    this.value = this.get();
+    this.dirty = false;
+  }
   get() {
-    Dep.target = this;
-    this.getter();
-    Dep.target = null;
+    debugger;
+    pushTarget(this);
+    const result = this.getter.call(this.vm);
+    debugger;
+    popTarget();
+    return result;
   }
 
   addDep(dep) {
@@ -31,9 +38,17 @@ export default class Watcher {
       dep.addSub(this);
     }
   }
-
+  depend() {
+    this.deps.forEach((dep) => {
+      dep.depend();
+    });
+  }
   update() {
-    queueWatcher(this);
+    if (this.lazy) {
+      this.dirty = true;
+    } else {
+      queueWatcher(this);
+    }
   }
 
   run() {

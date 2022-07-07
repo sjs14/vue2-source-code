@@ -31,6 +31,7 @@ export const defineReactive = function (target, key, value) {
   // 递归
   observe(value);
   const dep = new Dep();
+ window[`_${key}`] = dep
   Object.defineProperty(target, key, {
     get() {
       if (Dep.target) {

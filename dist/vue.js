@@ -350,38 +350,6 @@
     return new Function("with(this){ return ".concat(code, "}"));
   };
 
-  var oldArrayProto = Array.prototype;
-  var newArrayProto = Object.create(oldArrayProto);
-  var methods = ["push", "pop", "shift", "unshift", "reserve", "sort", "splice"];
-  methods.forEach(function (method) {
-    newArrayProto[method] = function () {
-      var _oldArrayProto$method;
-
-      for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
-        args[_key] = arguments[_key];
-      }
-
-      var res = (_oldArrayProto$method = oldArrayProto[method]).call.apply(_oldArrayProto$method, [this].concat(args));
-
-      var ob = this.__ob__;
-      var addItems = [];
-
-      switch (method) {
-        case "push":
-        case "unshift":
-          addItems = args;
-          break;
-
-        case "splice":
-          addItems = args.slice(2);
-          break;
-      }
-
-      ob.observeArray(addItems);
-      return res;
-    };
-  });
-
   var id$1 = 0;
 
   var Dep = /*#__PURE__*/function () {
@@ -414,97 +382,16 @@
     return Dep;
   }();
 
+  var stack = [];
   Dep.target = null;
-
-  var Observer = /*#__PURE__*/function () {
-    function Observer(data) {
-      _classCallCheck(this, Observer);
-
-      Object.defineProperty(data, "__ob__", {
-        value: this,
-        enumerable: false
-      });
-
-      if (Array.isArray(data)) {
-        this.observeArray(data);
-      } else {
-        this.walk(data);
-      }
-    }
-
-    _createClass(Observer, [{
-      key: "walk",
-      value: function walk(data) {
-        Object.keys(data).forEach(function (key) {
-          defineReactive(data, key, data[key]);
-        });
-      }
-    }, {
-      key: "observeArray",
-      value: function observeArray(data) {
-        data.__proto__ = newArrayProto;
-        data.forEach(function (item) {
-          return observe(item);
-        });
-      }
-    }]);
-
-    return Observer;
-  }();
-
-  var defineReactive = function defineReactive(target, key, value) {
-    // 递归
-    observe(value);
-    var dep = new Dep();
-    Object.defineProperty(target, key, {
-      get: function get() {
-        if (Dep.target) {
-          dep.depend();
-        }
-
-        return value;
-      },
-      set: function set(newVal) {
-        if (newVal === value) return;
-        observe(newVal);
-        value = newVal;
-        dep.notify();
-      }
-    });
-  };
-  var observe = function observe(data) {
-    if (_typeof(data) !== "object" || data === null) {
-      return;
-    }
-
-    if (data.__ob__) {
-      return data.__ob__;
-    }
-
-    new Observer(data);
-  };
-
-  var proxy = function proxy(vm, targetKey, key) {
-    Object.defineProperty(vm, key, {
-      get: function get() {
-        return vm[targetKey][key];
-      },
-      set: function set(newVal) {
-        vm[targetKey][key] = newVal;
-      }
-    });
-  };
-
-  var initState = function initState(vm) {
-    var data = vm.$options.data;
-    data = typeof data === "function" ? data.call(vm) : data;
-    vm._data = data;
-    observe(data);
-    Object.keys(vm._data).forEach(function (key) {
-      // 数据代理
-      proxy(vm, "_data", key);
-    });
-  };
+  function pushTarget(watcher) {
+    stack.push(watcher);
+    Dep.target = watcher;
+  }
+  function popTarget() {
+    stack.pop();
+    Dep.target = stack[stack.length - 1];
+  }
 
   var id = 0;
 
@@ -513,19 +400,31 @@
       _classCallCheck(this, Watcher);
 
       this.id = id++;
+      this.vm = vm;
       this.getter = fn;
       this.renderWatch = !!options.renderWatch;
       this.deps = [];
       this.depIds = new Set();
-      this.get();
+      this.lazy = !!options.lazy;
+      this.dirty = !!options.lazy;
+      this.lazy ? undefined : this.get();
     }
 
     _createClass(Watcher, [{
+      key: "evaluate",
+      value: function evaluate() {
+        this.value = this.get();
+        this.dirty = false;
+      }
+    }, {
       key: "get",
       value: function get() {
-        Dep.target = this;
-        this.getter();
-        Dep.target = null;
+        debugger;
+        pushTarget(this);
+        var result = this.getter.call(this.vm);
+        debugger;
+        popTarget();
+        return result;
       }
     }, {
       key: "addDep",
@@ -539,9 +438,20 @@
         }
       }
     }, {
+      key: "depend",
+      value: function depend() {
+        this.deps.forEach(function (dep) {
+          dep.depend();
+        });
+      }
+    }, {
       key: "update",
       value: function update() {
-        queueWatcher(this);
+        if (this.lazy) {
+          this.dirty = true;
+        } else {
+          queueWatcher(this);
+        }
       }
     }, {
       key: "run",
@@ -625,6 +535,175 @@
       return cb();
     });
   }
+
+  function initComputed(vm) {
+    var userDefComputeds = vm.$options.computed;
+
+    if (!userDefComputeds) {
+      return;
+    }
+
+    vm._computedWatcherMap = {};
+    Object.keys(userDefComputeds).forEach(function (key) {
+      var userDef = userDefComputeds[key];
+      var getter = typeof userDef === "function" ? userDef : userDef.get;
+      vm._computedWatcherMap[key] = new Watcher(vm, getter, {
+        lazy: true
+      });
+      defineComputed(vm, key, userDef);
+    });
+  }
+
+  function defineComputed(vm, key, userDef) {
+    //   const getter = typeof userDef === "function" ? userDef : userDef.get;
+    var setter = userDef.set || function () {};
+
+    Object.defineProperty(vm, key, {
+      get: createComputedGetter(vm, key),
+      set: setter
+    });
+  }
+
+  function createComputedGetter(vm, key) {
+    return function () {
+      var watcher = vm._computedWatcherMap[key];
+
+      if (watcher.dirty) {
+        watcher.evaluate();
+      }
+
+      debugger;
+
+      if (Dep.target) {
+        watcher.depend();
+      }
+
+      return watcher.value;
+    };
+  }
+
+  var oldArrayProto = Array.prototype;
+  var newArrayProto = Object.create(oldArrayProto);
+  var methods = ["push", "pop", "shift", "unshift", "reserve", "sort", "splice"];
+  methods.forEach(function (method) {
+    newArrayProto[method] = function () {
+      var _oldArrayProto$method;
+
+      for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+        args[_key] = arguments[_key];
+      }
+
+      var res = (_oldArrayProto$method = oldArrayProto[method]).call.apply(_oldArrayProto$method, [this].concat(args));
+
+      var ob = this.__ob__;
+      var addItems = [];
+
+      switch (method) {
+        case "push":
+        case "unshift":
+          addItems = args;
+          break;
+
+        case "splice":
+          addItems = args.slice(2);
+          break;
+      }
+
+      ob.observeArray(addItems);
+      return res;
+    };
+  });
+
+  var Observer = /*#__PURE__*/function () {
+    function Observer(data) {
+      _classCallCheck(this, Observer);
+
+      Object.defineProperty(data, "__ob__", {
+        value: this,
+        enumerable: false
+      });
+
+      if (Array.isArray(data)) {
+        this.observeArray(data);
+      } else {
+        this.walk(data);
+      }
+    }
+
+    _createClass(Observer, [{
+      key: "walk",
+      value: function walk(data) {
+        Object.keys(data).forEach(function (key) {
+          defineReactive(data, key, data[key]);
+        });
+      }
+    }, {
+      key: "observeArray",
+      value: function observeArray(data) {
+        data.__proto__ = newArrayProto;
+        data.forEach(function (item) {
+          return observe(item);
+        });
+      }
+    }]);
+
+    return Observer;
+  }();
+
+  var defineReactive = function defineReactive(target, key, value) {
+    // 递归
+    observe(value);
+    var dep = new Dep();
+    window["_".concat(key)] = dep;
+    Object.defineProperty(target, key, {
+      get: function get() {
+        if (Dep.target) {
+          dep.depend();
+        }
+
+        return value;
+      },
+      set: function set(newVal) {
+        if (newVal === value) return;
+        observe(newVal);
+        value = newVal;
+        dep.notify();
+      }
+    });
+  };
+  var observe = function observe(data) {
+    if (_typeof(data) !== "object" || data === null) {
+      return;
+    }
+
+    if (data.__ob__) {
+      return data.__ob__;
+    }
+
+    new Observer(data);
+  };
+
+  var proxy = function proxy(vm, targetKey, key) {
+    Object.defineProperty(vm, key, {
+      get: function get() {
+        return vm[targetKey][key];
+      },
+      set: function set(newVal) {
+        vm[targetKey][key] = newVal;
+      }
+    });
+  };
+
+  var initState = function initState(vm) {
+    var data = vm.$options.data;
+    data = typeof data === "function" ? data.call(vm) : data;
+    vm._data = data;
+    observe(data);
+    Object.keys(vm._data).forEach(function (key) {
+      // 数据代理
+      proxy(vm, "_data", key);
+    });
+  };
 
   function createElementVNode(vm, tag) {
     var props = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
@@ -751,6 +830,7 @@
       callHook(vm, "beforeCreate"); // 初始化数据
 
       initState(vm);
+      initComputed(vm);
       callHook(vm, "created"); // 挂载
 
       if (options.el) {
