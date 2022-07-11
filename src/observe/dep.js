@@ -21,7 +21,7 @@ class Dep {
   }
 }
 
-let stack = [];
+const stack = [];
 Dep.target = null;
 
 export function pushTarget(watcher) {

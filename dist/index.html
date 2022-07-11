@@ -13,9 +13,8 @@
       id="hehe"
       key="132"
     >
-      <p>{{fullname}}</p>
-      <p>{{age}}</p>
-      <p>{{fullname}}</p>
+      <p id="text">{{list}}</p>
+      <p id="text">{{a}}</p>
     </div>
   </body>
   <script src="./vue.js"></script>
@@ -24,28 +23,16 @@
     const vm = new Vue({
       data() {
         return {
-          firstname: "shen",
-          lastname: "junsheng",
-          age: 31,
+          list: [1, 2, 3],
+          a: { a: 1 },
         };
-      },
-      computed: {
-        fullname: {
-          get() {
-            console.log("run");
-            return this.firstname + this.lastname;
-          },
-          set(newVal) {
-            console.log(newVal);
-          },
-        },
       },
       el: "#app",
     });
 
     setTimeout(() => {
-      vm.firstname = "XXXX";
-      vm.firstname = "XXXX1";
+      // vm.list.push(444);
+      vm.a.b = 2;
     }, 1000);
   </script>
 </html>

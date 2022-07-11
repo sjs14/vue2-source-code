@@ -34,6 +34,8 @@ methods.forEach((method) => {
     }
     ob.observeArray(addItems);
 
+    ob.dep.notify();
+
     return res;
   };
 });

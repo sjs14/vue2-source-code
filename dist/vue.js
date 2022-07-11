@@ -350,6 +350,39 @@
     return new Function("with(this){ return ".concat(code, "}"));
   };
 
+  var oldArrayProto = Array.prototype;
+  var newArrayProto = Object.create(oldArrayProto);
+  var methods = ["push", "pop", "shift", "unshift", "reserve", "sort", "splice"];
+  methods.forEach(function (method) {
+    newArrayProto[method] = function () {
+      var _oldArrayProto$method;
+
+      for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+        args[_key] = arguments[_key];
+      }
+
+      var res = (_oldArrayProto$method = oldArrayProto[method]).call.apply(_oldArrayProto$method, [this].concat(args));
+
+      var ob = this.__ob__;
+      var addItems = [];
+
+      switch (method) {
+        case "push":
+        case "unshift":
+          addItems = args;
+          break;
+
+        case "splice":
+          addItems = args.slice(2);
+          break;
+      }
+
+      ob.observeArray(addItems);
+      ob.dep.notify();
+      return res;
+    };
+  });
+
   var id$1 = 0;
 
   var Dep = /*#__PURE__*/function () {
@@ -393,21 +426,123 @@
     Dep.target = stack[stack.length - 1];
   }
 
+  var Observer = /*#__PURE__*/function () {
+    function Observer(data) {
+      _classCallCheck(this, Observer);
+
+      this.dep = new Dep();
+      Object.defineProperty(data, "__ob__", {
+        value: this,
+        enumerable: false
+      });
+
+      if (Array.isArray(data)) {
+        this.observeArray(data);
+      } else {
+        this.walk(data);
+      }
+    }
+
+    _createClass(Observer, [{
+      key: "walk",
+      value: function walk(data) {
+        Object.keys(data).forEach(function (key) {
+          defineReactive(data, key, data[key]);
+        });
+      }
+    }, {
+      key: "observeArray",
+      value: function observeArray(data) {
+        data.__proto__ = newArrayProto;
+        data.forEach(function (item) {
+          return observe(item);
+        });
+      }
+    }]);
+
+    return Observer;
+  }();
+
+  function dependArray(value) {
+    value.forEach(function (item) {
+      item.__ob__ && item.__ob__.dep.depend();
+
+      if (Array.isArray(item)) {
+        dependArray(item);
+      }
+    });
+  }
+
+  var defineReactive = function defineReactive(target, key, value) {
+    // 递归
+    var childOb = observe(value);
+    var dep = new Dep();
+    Object.defineProperty(target, key, {
+      get: function get() {
+        if (Dep.target) {
+          dep.depend();
+
+          if (childOb) {
+            childOb.dep.depend();
+
+            if (Array.isArray(value)) {
+              dependArray(value);
+            }
+          }
+        }
+
+        return value;
+      },
+      set: function set(newVal) {
+        if (newVal === value) return;
+        observe(newVal);
+        value = newVal;
+        dep.notify();
+      }
+    });
+  };
+  var observe = function observe(data) {
+    if (_typeof(data) !== "object" || data === null) {
+      return;
+    }
+
+    if (data.__ob__) {
+      return data.__ob__;
+    }
+
+    return new Observer(data);
+  };
+
+  var proxy = function proxy(vm, targetKey, key) {
+    Object.defineProperty(vm, key, {
+      get: function get() {
+        return vm[targetKey][key];
+      },
+      set: function set(newVal) {
+        vm[targetKey][key] = newVal;
+      }
+    });
+  };
+
   var id = 0;
 
   var Watcher = /*#__PURE__*/function () {
-    function Watcher(vm, fn, options) {
+    function Watcher(vm, expOrFn, options, cb) {
       _classCallCheck(this, Watcher);
 
       this.id = id++;
-      this.vm = vm;
-      this.getter = fn;
+      this.getter = typeof expOrFn === "string" ? function () {
+        return vm[expOrFn];
+      } : expOrFn;
       this.renderWatch = !!options.renderWatch;
       this.deps = [];
       this.depIds = new Set();
+      this.vm = vm;
       this.lazy = !!options.lazy;
       this.dirty = !!options.lazy;
-      this.lazy ? undefined : this.get();
+      this.user = !!options.user;
+      this.cb = cb;
+      this.value = options.lazy ? undefined : this.get();
     }
 
     _createClass(Watcher, [{
@@ -419,12 +554,17 @@
     }, {
       key: "get",
       value: function get() {
-        debugger;
         pushTarget(this);
-        var result = this.getter.call(this.vm);
-        debugger;
+        var value = this.getter.call(this.vm);
         popTarget();
-        return result;
+        return value;
+      }
+    }, {
+      key: "depend",
+      value: function depend() {
+        this.deps.forEach(function (dep) {
+          dep.depend();
+        });
       }
     }, {
       key: "addDep",
@@ -456,7 +596,9 @@
     }, {
       key: "run",
       value: function run() {
-        this.get();
+        var oldVal = this.value,
+            newVal = this.get();
+        this.cb && this.cb(oldVal, newVal);
       }
     }]);
 
@@ -536,18 +678,31 @@
     });
   }
 
+  var initState = function initState(vm) {
+    initData(vm);
+    initComputed(vm);
+    initWatch(vm);
+  };
+
+  function initData(vm) {
+    var data = vm.$options.data;
+    data = typeof data === "function" ? data.call(vm) : data;
+    vm._data = data;
+    observe(data);
+    Object.keys(vm._data).forEach(function (key) {
+      // 数据代理
+      proxy(vm, "_data", key);
+    });
+  }
+
   function initComputed(vm) {
-    var userDefComputeds = vm.$options.computed;
-
-    if (!userDefComputeds) {
-      return;
-    }
-
-    vm._computedWatcherMap = {};
-    Object.keys(userDefComputeds).forEach(function (key) {
-      var userDef = userDefComputeds[key];
+    var computed = vm.$options.computed;
+    if (!computed) return;
+    vm._computedMap = {};
+    Object.keys(computed).forEach(function (key) {
+      var userDef = computed[key];
       var getter = typeof userDef === "function" ? userDef : userDef.get;
-      vm._computedWatcherMap[key] = new Watcher(vm, getter, {
+      vm._computedMap[key] = new Watcher(vm, getter, {
         lazy: true
       });
       defineComputed(vm, key, userDef);
@@ -555,24 +710,21 @@
   }
 
   function defineComputed(vm, key, userDef) {
-    //   const getter = typeof userDef === "function" ? userDef : userDef.get;
     var setter = userDef.set || function () {};
 
     Object.defineProperty(vm, key, {
-      get: createComputedGetter(vm, key),
+      get: createComputedGetter(key),
       set: setter
     });
   }
 
-  function createComputedGetter(vm, key) {
+  function createComputedGetter(key) {
     return function () {
-      var watcher = vm._computedWatcherMap[key];
+      var watcher = this._computedMap[key];
 
       if (watcher.dirty) {
         watcher.evaluate();
       }
-
-      debugger;
 
       if (Dep.target) {
         watcher.depend();
@@ -582,128 +734,23 @@
     };
   }
 
-  var oldArrayProto = Array.prototype;
-  var newArrayProto = Object.create(oldArrayProto);
-  var methods = ["push", "pop", "shift", "unshift", "reserve", "sort", "splice"];
-  methods.forEach(function (method) {
-    newArrayProto[method] = function () {
-      var _oldArrayProto$method;
-
-      for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
-        args[_key] = arguments[_key];
-      }
-
-      var res = (_oldArrayProto$method = oldArrayProto[method]).call.apply(_oldArrayProto$method, [this].concat(args));
-
-      var ob = this.__ob__;
-      var addItems = [];
-
-      switch (method) {
-        case "push":
-        case "unshift":
-          addItems = args;
-          break;
-
-        case "splice":
-          addItems = args.slice(2);
-          break;
-      }
-
-      ob.observeArray(addItems);
-      return res;
-    };
-  });
-
-  var Observer = /*#__PURE__*/function () {
-    function Observer(data) {
-      _classCallCheck(this, Observer);
-
-      Object.defineProperty(data, "__ob__", {
-        value: this,
-        enumerable: false
-      });
-
-      if (Array.isArray(data)) {
-        this.observeArray(data);
+  function initWatch(vm) {
+    var watch = vm.$options.watch;
+    if (!watch) return;
+    Object.keys(watch).forEach(function (key) {
+      if (Array.isArray(watch[key])) {
+        watch[key].forEach(function (item) {
+          createWatcher(vm, key, item);
+        });
       } else {
-        this.walk(data);
-      }
-    }
-
-    _createClass(Observer, [{
-      key: "walk",
-      value: function walk(data) {
-        Object.keys(data).forEach(function (key) {
-          defineReactive(data, key, data[key]);
-        });
-      }
-    }, {
-      key: "observeArray",
-      value: function observeArray(data) {
-        data.__proto__ = newArrayProto;
-        data.forEach(function (item) {
-          return observe(item);
-        });
-      }
-    }]);
-
-    return Observer;
-  }();
-
-  var defineReactive = function defineReactive(target, key, value) {
-    // 递归
-    observe(value);
-    var dep = new Dep();
-    window["_".concat(key)] = dep;
-    Object.defineProperty(target, key, {
-      get: function get() {
-        if (Dep.target) {
-          dep.depend();
-        }
-
-        return value;
-      },
-      set: function set(newVal) {
-        if (newVal === value) return;
-        observe(newVal);
-        value = newVal;
-        dep.notify();
+        createWatcher(vm, key, watch[key]);
       }
     });
-  };
-  var observe = function observe(data) {
-    if (_typeof(data) !== "object" || data === null) {
-      return;
-    }
+  }
 
-    if (data.__ob__) {
-      return data.__ob__;
-    }
-
-    new Observer(data);
-  };
-
-  var proxy = function proxy(vm, targetKey, key) {
-    Object.defineProperty(vm, key, {
-      get: function get() {
-        return vm[targetKey][key];
-      },
-      set: function set(newVal) {
-        vm[targetKey][key] = newVal;
-      }
-    });
-  };
-
-  var initState = function initState(vm) {
-    var data = vm.$options.data;
-    data = typeof data === "function" ? data.call(vm) : data;
-    vm._data = data;
-    observe(data);
-    Object.keys(vm._data).forEach(function (key) {
-      // 数据代理
-      proxy(vm, "_data", key);
-    });
-  };
+  function createWatcher(vm, key, cb) {
+    vm.$watch(key, cb);
+  }
 
   function createElementVNode(vm, tag) {
     var props = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
@@ -863,6 +910,12 @@
     };
 
     Vue.prototype.$nextTick = nextTick;
+
+    Vue.prototype.$watch = function (expOrFn, cb) {
+      new Watcher(this, expOrFn, {
+        user: true
+      }, cb);
+    };
   };
 
   function Vue(options) {
