@@ -1,7 +1,7 @@
 import { compileToFunction } from "./compiler/index";
 import { initState } from "./initState";
 import { callHook, mountComponent } from "./lifycycle";
-import { nextTick } from "./observe/watcher";
+import Watcher, { nextTick } from "./observe/watcher";
 import { mergeOptions } from "./util";
 
 export const initMixin = function (Vue) {
@@ -41,4 +41,8 @@ export const initMixin = function (Vue) {
     mountComponent(vm, el);
   };
   Vue.prototype.$nextTick = nextTick;
+
+  Vue.prototype.$watch = function (expOrFn, cb) {
+    new Watcher(this, expOrFn, { user: true }, cb);
+  };
 };

@@ -13,48 +13,45 @@
       id="hehe"
       key="132"
     >
-      <p id="text">name: {{name}}，age: {{age}}</p>
-      <p>hello</p>
-      <span>world</span>
+      <p id="text">{{fullname}}</p>
+      <p id="text">{{fullname}}</p>
+      <p id="text">{{fullname}}</p>
+      <p id="text">{{fullname}}</p>
     </div>
   </body>
   <script src="./vue.js"></script>
   <!-- <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.7.0/vue.min.js"></script> -->
   <script>
-    Vue.mixin({
-      created() {
-        console.log("mixin1-created");
-      },
-    });
-
-    Vue.mixin({
-      created() {
-        console.log("mixin2-created");
-      },
-    });
     const vm = new Vue({
       data() {
         return {
-          name: "sjs",
+          firstname: "shen",
+          lastname: "junsheng",
           age: 31,
         };
       },
-      created() {
-        console.log("created");
+      computed: {
+        fullname() {
+          return `${this.firstname} ${this.lastname}`;
+        },
+      },
+      watch: {
+        firstname(o, n) {
+          console.log("change firstname opt", o, n);
+        },
       },
       el: "#app",
     });
 
+    vm.$watch(
+      () => vm.firstname,
+      (o, n) => {
+        console.log("change firstname api", o, n);
+      }
+    );
+
     setTimeout(() => {
-      vm.name = "skp";
-
-      vm.age = 1;
-
-      vm.$nextTick(function test() {
-        console.log(document.querySelector("#text").innerText);
-      });
+      vm.firstname = "沈";
     }, 1000);
-
-    console.log(Vue.options);
   </script>
 </html>

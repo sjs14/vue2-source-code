@@ -1,28 +1,43 @@
-import Dep from "./dep";
+import Dep, { popTarget, pushTarget } from "./dep";
 
 let id = 0;
 
 export default class Watcher {
-  constructor(vm, fn, options) {
+  constructor(vm, expOrFn, options, cb) {
     this.id = id++;
 
-    this.getter = fn;
+    this.getter = typeof expOrFn === "string" ? () => vm[expOrFn] : expOrFn;
 
     this.renderWatch = !!options.renderWatch;
 
     this.deps = [];
 
     this.depIds = new Set();
+    this.vm = vm;
+    this.lazy = !!options.lazy;
+    this.dirty = !!options.lazy;
+    this.user = !!options.user;
+    this.cb = cb;
+    this.value = options.lazy ? undefined : this.get();
+  }
 
-    this.get();
+  evaluate() {
+    this.value = this.get();
+    this.dirty = false;
   }
 
   get() {
-    Dep.target = this;
-    this.getter();
-    Dep.target = null;
-  }
+    pushTarget(this);
+    const value = this.getter.call(this.vm);
+    popTarget();
 
+    return value;
+  }
+  depend() {
+    this.deps.forEach((dep) => {
+      dep.depend();
+    });
+  }
   addDep(dep) {
     const depId = dep.id;
     if (!this.depIds.has(depId)) {
@@ -33,11 +48,18 @@ export default class Watcher {
   }
 
   update() {
-    queueWatcher(this);
+    if (this.lazy) {
+      this.dirty = true;
+    } else {
+      queueWatcher(this);
+    }
   }
 
   run() {
-    this.get();
+    const oldVal = this.value,
+      newVal = this.get();
+
+    this.cb && this.cb(oldVal, newVal);
   }
 }
 

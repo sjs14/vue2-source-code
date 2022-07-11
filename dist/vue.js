@@ -414,7 +414,16 @@
     return Dep;
   }();
 
+  var stack = [];
   Dep.target = null;
+  function pushTarget(watcher) {
+    stack.push(watcher);
+    Dep.target = watcher;
+  }
+  function popTarget() {
+    stack.pop();
+    Dep.target = stack[stack.length - 1];
+  }
 
   var Observer = /*#__PURE__*/function () {
     function Observer(data) {
@@ -495,37 +504,47 @@
     });
   };
 
-  var initState = function initState(vm) {
-    var data = vm.$options.data;
-    data = typeof data === "function" ? data.call(vm) : data;
-    vm._data = data;
-    observe(data);
-    Object.keys(vm._data).forEach(function (key) {
-      // 数据代理
-      proxy(vm, "_data", key);
-    });
-  };
-
   var id = 0;
 
   var Watcher = /*#__PURE__*/function () {
-    function Watcher(vm, fn, options) {
+    function Watcher(vm, expOrFn, options, cb) {
       _classCallCheck(this, Watcher);
 
       this.id = id++;
-      this.getter = fn;
+      this.getter = typeof expOrFn === "string" ? function () {
+        return vm[expOrFn];
+      } : expOrFn;
       this.renderWatch = !!options.renderWatch;
       this.deps = [];
       this.depIds = new Set();
-      this.get();
+      this.vm = vm;
+      this.lazy = !!options.lazy;
+      this.dirty = !!options.lazy;
+      this.user = !!options.user;
+      this.cb = cb;
+      this.value = options.lazy ? undefined : this.get();
     }
 
     _createClass(Watcher, [{
+      key: "evaluate",
+      value: function evaluate() {
+        this.value = this.get();
+        this.dirty = false;
+      }
+    }, {
       key: "get",
       value: function get() {
-        Dep.target = this;
-        this.getter();
-        Dep.target = null;
+        pushTarget(this);
+        var value = this.getter.call(this.vm);
+        popTarget();
+        return value;
+      }
+    }, {
+      key: "depend",
+      value: function depend() {
+        this.deps.forEach(function (dep) {
+          dep.depend();
+        });
       }
     }, {
       key: "addDep",
@@ -541,12 +560,18 @@
     }, {
       key: "update",
       value: function update() {
-        queueWatcher(this);
+        if (this.lazy) {
+          this.dirty = true;
+        } else {
+          queueWatcher(this);
+        }
       }
     }, {
       key: "run",
       value: function run() {
-        this.get();
+        var oldVal = this.value,
+            newVal = this.get();
+        this.cb && this.cb(oldVal, newVal);
       }
     }]);
 
@@ -624,6 +649,80 @@
     cbs.forEach(function (cb) {
       return cb();
     });
+  }
+
+  var initState = function initState(vm) {
+    initData(vm);
+    initComputed(vm);
+    initWatch(vm);
+  };
+
+  function initData(vm) {
+    var data = vm.$options.data;
+    data = typeof data === "function" ? data.call(vm) : data;
+    vm._data = data;
+    observe(data);
+    Object.keys(vm._data).forEach(function (key) {
+      // 数据代理
+      proxy(vm, "_data", key);
+    });
+  }
+
+  function initComputed(vm) {
+    var computed = vm.$options.computed;
+    if (!computed) return;
+    vm._computedMap = {};
+    Object.keys(computed).forEach(function (key) {
+      var userDef = computed[key];
+      var getter = typeof userDef === "function" ? userDef : userDef.get;
+      vm._computedMap[key] = new Watcher(vm, getter, {
+        lazy: true
+      });
+      defineComputed(vm, key, userDef);
+    });
+  }
+
+  function defineComputed(vm, key, userDef) {
+    var setter = userDef.set || function () {};
+
+    Object.defineProperty(vm, key, {
+      get: createComputedGetter(key),
+      set: setter
+    });
+  }
+
+  function createComputedGetter(key) {
+    return function () {
+      var watcher = this._computedMap[key];
+
+      if (watcher.dirty) {
+        watcher.evaluate();
+      }
+
+      if (Dep.target) {
+        watcher.depend();
+      }
+
+      return watcher.value;
+    };
+  }
+
+  function initWatch(vm) {
+    var watch = vm.$options.watch;
+    if (!watch) return;
+    Object.keys(watch).forEach(function (key) {
+      if (Array.isArray(watch[key])) {
+        watch[key].forEach(function (item) {
+          createWatcher(vm, key, item);
+        });
+      } else {
+        createWatcher(vm, key, watch[key]);
+      }
+    });
+  }
+
+  function createWatcher(vm, key, cb) {
+    vm.$watch(key, cb);
   }
 
   function createElementVNode(vm, tag) {
@@ -783,6 +882,12 @@
     };
 
     Vue.prototype.$nextTick = nextTick;
+
+    Vue.prototype.$watch = function (expOrFn, cb) {
+      new Watcher(this, expOrFn, {
+        user: true
+      }, cb);
+    };
   };
 
   function Vue(options) {

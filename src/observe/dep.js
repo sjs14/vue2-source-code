@@ -21,6 +21,17 @@ class Dep {
   }
 }
 
+const stack = [];
 Dep.target = null;
+
+export function pushTarget(watcher) {
+  stack.push(watcher);
+  Dep.target = watcher;
+}
+
+export function popTarget() {
+  stack.pop();
+  Dep.target = stack[stack.length - 1];
+}
 
 export default Dep;

@@ -8,7 +8,6 @@ function Vue(options) {
 
 initMixin(Vue);
 initLiftCycle(Vue);
-
 initGlobalApi(Vue);
 
 export default Vue;
