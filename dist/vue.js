@@ -378,6 +378,7 @@
       }
 
       ob.observeArray(addItems);
+      ob.dep.notify();
       return res;
     };
   });
@@ -429,6 +430,7 @@
     function Observer(data) {
       _classCallCheck(this, Observer);
 
+      this.dep = new Dep();
       Object.defineProperty(data, "__ob__", {
         value: this,
         enumerable: false
@@ -461,14 +463,32 @@
     return Observer;
   }();
 
+  function dependArray(value) {
+    value.forEach(function (item) {
+      item.__ob__ && item.__ob__.dep.depend();
+
+      if (Array.isArray(item)) {
+        dependArray(item);
+      }
+    });
+  }
+
   var defineReactive = function defineReactive(target, key, value) {
     // 递归
-    observe(value);
+    var childOb = observe(value);
     var dep = new Dep();
     Object.defineProperty(target, key, {
       get: function get() {
         if (Dep.target) {
           dep.depend();
+
+          if (childOb) {
+            childOb.dep.depend();
+
+            if (Array.isArray(value)) {
+              dependArray(value);
+            }
+          }
         }
 
         return value;
@@ -490,7 +510,7 @@
       return data.__ob__;
     }
 
-    new Observer(data);
+    return new Observer(data);
   };
 
   var proxy = function proxy(vm, targetKey, key) {

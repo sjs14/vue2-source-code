@@ -13,10 +13,8 @@
       id="hehe"
       key="132"
     >
-      <p id="text">{{fullname}}</p>
-      <p id="text">{{fullname}}</p>
-      <p id="text">{{fullname}}</p>
-      <p id="text">{{fullname}}</p>
+      <p id="text">{{list}}</p>
+      <p id="text">{{a}}</p>
     </div>
   </body>
   <script src="./vue.js"></script>
@@ -25,33 +23,16 @@
     const vm = new Vue({
       data() {
         return {
-          firstname: "shen",
-          lastname: "junsheng",
-          age: 31,
+          list: [1, 2, 3],
+          a: { a: 1 },
         };
-      },
-      computed: {
-        fullname() {
-          return `${this.firstname} ${this.lastname}`;
-        },
-      },
-      watch: {
-        firstname(o, n) {
-          console.log("change firstname opt", o, n);
-        },
       },
       el: "#app",
     });
 
-    vm.$watch(
-      () => vm.firstname,
-      (o, n) => {
-        console.log("change firstname api", o, n);
-      }
-    );
-
     setTimeout(() => {
-      vm.firstname = "沈";
+      // vm.list.push(444);
+      vm.a.b = 2;
     }, 1000);
   </script>
 </html>
